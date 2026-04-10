@@ -1,13 +1,42 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Send, Bot, User, Code2 } from 'lucide-react'
 import MasteryToggle from '../components/MasteryToggle'
+import { sendChatMessage, getUnits } from '../api'
+import { useStudyUnit } from '../studyUnitContext'
 
 export default function Chat() {
+  const { unitId } = useStudyUnit()
+  const [units, setUnits] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    getUnits()
+      .then((d) => {
+        if (!cancelled) setUnits(d.units ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setUnits([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [getUnits])
+
+  const unitLabel = useMemo(() => {
+    const u = units.find((x) => x.id === unitId)
+    return u?.name ?? 'Study unit'
+  }, [units, unitId])
+
   const [messages, setMessages] = useState([
-    { id: 1, role: 'bot', content: "Hello! I'm your AI Study Buddy. Ask me anything about your uploaded materials." }
+    {
+      id: 'welcome',
+      role: 'bot',
+      content: "Hello! I'm your AI Study Buddy. Ask me anything about your uploaded materials.",
+    },
   ])
   const [input, setInput] = useState('')
   const [isCodeMode, setIsCodeMode] = useState(false)
+  const [sending, setSending] = useState(false)
   const messagesEndRef = useRef(null)
 
   const scrollToBottom = () => {
@@ -20,25 +49,44 @@ export default function Chat() {
 
   const handleSend = (e) => {
     e.preventDefault()
-    if (!input.trim()) return
+    if (!input.trim() || sending) return
 
-    const newMsg = { id: Date.now(), role: 'user', content: input }
-    setMessages(prev => [...prev, newMsg])
+    const text = input.trim()
+    const userMsg = { id: `u_${Date.now()}`, role: 'user', content: text }
+    setMessages((prev) => [...prev, userMsg])
     setInput('')
+    setSending(true)
 
-    // Simulate bot response
-    setTimeout(() => {
-      const modeText = isCodeMode 
-        ? "Here is the code representation..." 
-        : "Here is a simple explanation..."
-      
-      setMessages(prev => [...prev, { 
-        id: Date.now(), 
-        role: 'bot', 
-        content: modeText,
-        isCodeResponse: isCodeMode
-      }])
-    }, 1000)
+    sendChatMessage({
+      message: text,
+      codeMode: isCodeMode,
+      unitId,
+    })
+      .then((data) => {
+        const m = data.message
+        if (m) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              isCodeResponse: Boolean(m.isCodeResponse),
+            },
+          ])
+        }
+      })
+      .catch(() => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `err_${Date.now()}`,
+            role: 'bot',
+            content: 'Something went wrong. Check the API or try again.',
+          },
+        ])
+      })
+      .finally(() => setSending(false))
   }
 
   return (
@@ -48,7 +96,7 @@ export default function Chat() {
           <Bot className="text-[var(--color-brand-accent)] w-6 h-6" />
           <div>
             <h2 className="font-display text-lg text-[var(--color-brand-accent)]">Study Assistant</h2>
-            <p className="text-xs font-mono text-[var(--color-brand-muted)]">Data Structures Unit</p>
+            <p className="text-xs font-mono text-[var(--color-brand-muted)]">{unitLabel}</p>
           </div>
         </div>
         <MasteryToggle isCodeMode={isCodeMode} setIsCodeMode={setIsCodeMode} />
@@ -56,17 +104,27 @@ export default function Chat() {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col hide-scrollbar h-full bg-[#0a0a0a]">
         {messages.map((msg) => (
-          <div 
-            key={msg.id} 
+          <div
+            key={msg.id}
             className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div className={`flex max-w-[85%] gap-3 items-end ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-[var(--color-brand-surface)] border border-[var(--color-brand-border)]' : 'bg-[var(--color-brand-accent)] bg-opacity-10 border border-[var(--color-brand-accent)]'}`}>
-                {msg.role === 'user' ? <User className="w-4 h-4 text-[#e8e2d5]" /> : <Bot className="w-5 h-5 text-[var(--color-brand-accent)]" />}
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  msg.role === 'user'
+                    ? 'bg-[var(--color-brand-surface)] border border-[var(--color-brand-border)]'
+                    : 'bg-[var(--color-brand-accent)] bg-opacity-10 border border-[var(--color-brand-accent)]'
+                }`}
+              >
+                {msg.role === 'user' ? (
+                  <User className="w-4 h-4 text-[#e8e2d5]" />
+                ) : (
+                  <Bot className="w-5 h-5 text-[var(--color-brand-accent)]" />
+                )}
               </div>
-              <div 
+              <div
                 className={`p-4 rounded-2xl font-body leading-relaxed text-[0.95rem] ${
-                  msg.role === 'user' 
+                  msg.role === 'user'
                     ? 'bg-[#1d1f1c] text-[#e8e2d5] rounded-br-sm border border-[var(--color-brand-border)]'
                     : msg.isCodeResponse
                       ? 'bg-[#0f1110] text-[#a0a59a] font-mono text-sm border border-l-2 border-l-[var(--color-brand-accent)] border-[var(--color-brand-border)] rounded-bl-sm'
@@ -93,17 +151,20 @@ export default function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask a question about the study materials..."
-            className="w-full bg-[#161714] text-[#e8e2d5] font-body rounded-full py-4 pl-6 pr-16 border border-[var(--color-brand-border)] focus:outline-none focus:border-[var(--color-brand-accent)] focus:ring-1 focus:ring-[var(--color-brand-accent)] transition-all shadow-inner placeholder-[var(--color-brand-muted)]"
+            disabled={sending}
+            className="w-full bg-[#161714] text-[#e8e2d5] font-body rounded-full py-4 pl-6 pr-16 border border-[var(--color-brand-border)] focus:outline-none focus:border-[var(--color-brand-accent)] focus:ring-1 focus:ring-[var(--color-brand-accent)] transition-all shadow-inner placeholder-[var(--color-brand-muted)] disabled:opacity-50"
           />
-          <button 
+          <button
             type="submit"
-            disabled={!input.trim()}
+            disabled={!input.trim() || sending}
             className="absolute right-2 bg-[var(--color-brand-accent)] hover:bg-yellow-600 disabled:opacity-50 disabled:hover:bg-[var(--color-brand-accent)] text-black p-2.5 rounded-full transition-transform active:scale-95"
           >
             <Send className="w-5 h-5 -ml-0.5" />
           </button>
         </form>
-        <p className="text-center text-[10px] font-mono text-[var(--color-brand-muted)] mt-3">Study Buddy AI can make mistakes. Verify important facts.</p>
+        <p className="text-center text-[10px] font-mono text-[var(--color-brand-muted)] mt-3">
+          Study Buddy AI can make mistakes. Verify important facts.
+        </p>
       </div>
     </div>
   )

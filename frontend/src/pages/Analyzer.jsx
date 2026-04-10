@@ -1,23 +1,29 @@
 import { useState, useEffect } from 'react'
 import TopicCard from '../components/TopicCard'
 import { Sparkles, BarChart2 } from 'lucide-react'
+import { getAnalysis } from '../api'
 
 export default function Analyzer() {
   const [loading, setLoading] = useState(true)
+  const [topics, setTopics] = useState([])
+  const [error, setError] = useState(null)
 
-  const topics = [
-    { name: "Stacks", weight: 85 },
-    { name: "Queues", weight: 70 },
-    { name: "Trees", weight: 65 },
-    { name: "Graphs", weight: 50 },
-    { name: "Linked Lists", weight: 45 },
-  ]
+  const load = () => {
+    setLoading(true)
+    setError(null)
+    getAnalysis()
+      .then((data) => {
+        setTopics(data.topics ?? [])
+      })
+      .catch((e) => {
+        setError(e.message || 'Analysis failed')
+        setTopics([])
+      })
+      .finally(() => setLoading(false))
+  }
 
   useEffect(() => {
-    // Simulate API call for analysis
-    setTimeout(() => {
-      setLoading(false)
-    }, 1500)
+    load()
   }, [])
 
   return (
@@ -28,13 +34,24 @@ export default function Analyzer() {
             <BarChart2 className="w-8 h-8" />
             Exam Predictions
           </h1>
-          <p className="text-[var(--color-brand-muted)] font-body mt-2">Predicted top topics based on past exams and your uploaded documents.</p>
+          <p className="text-[var(--color-brand-muted)] font-body mt-2">
+            Predicted top topics based on past exams and your uploaded documents.
+          </p>
         </div>
-        <button className="bg-[var(--color-brand-border)] hover:bg-[var(--color-brand-surface)] text-[var(--color-brand-text)] px-4 py-2 rounded flex items-center gap-2 font-mono transition-colors border border-[var(--color-brand-border)]">
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="bg-[var(--color-brand-border)] hover:bg-[var(--color-brand-surface)] text-[var(--color-brand-text)] px-4 py-2 rounded flex items-center gap-2 font-mono transition-colors border border-[var(--color-brand-border)] disabled:opacity-50"
+        >
           <Sparkles className="w-4 h-4 text-[var(--color-brand-accent)]" />
           Re-Analyze
         </button>
       </div>
+
+      {error && (
+        <p className="text-sm font-mono text-[var(--color-brand-danger)] border border-[var(--color-brand-danger)] rounded p-3">{error}</p>
+      )}
 
       {loading ? (
         <div className="flex justify-center items-center py-20 text-[var(--color-brand-muted)] font-mono animate-pulse">

@@ -1,26 +1,40 @@
 import { useState, useRef } from 'react'
 import { UploadCloud, CheckCircle, XCircle } from 'lucide-react'
+import { uploadDocument } from '../api'
 
 export default function Upload() {
   const [file, setFile] = useState(null)
-  const [status, setStatus] = useState('idle') // idle, uploading, success, error
+  const [status, setStatus] = useState('idle')
+  const [message, setMessage] = useState('')
   const fileInputRef = useRef(null)
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
       setFile(e.target.files[0])
       setStatus('idle')
+      setMessage('')
     }
   }
 
   const handleUpload = () => {
     if (!file) return
     setStatus('uploading')
+    setMessage('')
 
-    // Simulate backend upload
-    setTimeout(() => {
-      setStatus('success')
-    }, 2000)
+    uploadDocument(file)
+      .then((res) => {
+        if (res.ok) {
+          setStatus('success')
+          setMessage(res.message || 'Uploaded.')
+        } else {
+          setStatus('error')
+          setMessage(res.error || 'Upload failed')
+        }
+      })
+      .catch((e) => {
+        setStatus('error')
+        setMessage(e.message || 'Upload failed')
+      })
   }
 
   return (
@@ -35,6 +49,7 @@ export default function Upload() {
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             setFile(e.dataTransfer.files[0])
             setStatus('idle')
+            setMessage('')
           }
         }}
       >
@@ -50,6 +65,7 @@ export default function Upload() {
           onChange={handleFileChange}
         />
         <button
+          type="button"
           onClick={() => fileInputRef.current?.click()}
           className="bg-[var(--color-brand-border)] hover:bg-[var(--color-brand-accent)] text-[var(--color-brand-text)] hover:text-black font-mono py-2 px-6 rounded transition-colors"
         >
@@ -58,31 +74,42 @@ export default function Upload() {
       </div>
 
       {file && (
-        <div className="mt-8 p-4 bg-[var(--color-brand-surface)] border border-[var(--color-brand-border)] rounded-lg flex items-center justify-between">
-          <div className="flex items-center gap-3 overflow-hidden">
+        <div className="mt-8 p-4 bg-[var(--color-brand-surface)] border border-[var(--color-brand-border)] rounded-lg flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 overflow-hidden min-w-0">
             <span className="font-mono text-[var(--color-brand-accent)] truncate max-w-xs">{file.name}</span>
-            <span className="text-xs text-[var(--color-brand-muted)] font-mono">
+            <span className="text-xs text-[var(--color-brand-muted)] font-mono shrink-0">
               {(file.size / 1024 / 1024).toFixed(2)} MB
             </span>
           </div>
 
-          {status === 'idle' && (
-            <button
-              onClick={handleUpload}
-              className="bg-[var(--color-brand-accent)] text-black font-mono py-1 px-4 rounded hover:bg-yellow-600 transition-colors"
-            >
-              Upload
-            </button>
-          )}
-          {status === 'uploading' && <span className="text-[var(--color-brand-muted)] animate-pulse font-mono">Uploading...</span>}
-          {status === 'success' && <CheckCircle className="text-[var(--color-brand-success)]" />}
-          {status === 'error' && <XCircle className="text-[var(--color-brand-danger)]" />}
+          <div className="flex items-center gap-2 shrink-0">
+            {status === 'idle' && (
+              <button
+                type="button"
+                onClick={handleUpload}
+                className="bg-[var(--color-brand-accent)] text-black font-mono py-1 px-4 rounded hover:bg-yellow-600 transition-colors"
+              >
+                Upload
+              </button>
+            )}
+            {status === 'uploading' && (
+              <span className="text-[var(--color-brand-muted)] animate-pulse font-mono">Uploading...</span>
+            )}
+            {status === 'success' && <CheckCircle className="text-[var(--color-brand-success)]" />}
+            {status === 'error' && <XCircle className="text-[var(--color-brand-danger)]" />}
+          </div>
         </div>
       )}
 
       {status === 'success' && (
         <div className="mt-4 p-4 text-center text-sm font-mono text-[var(--color-brand-success)] bg-[#102410] border border-[var(--color-brand-success)] rounded">
-          Document successfully uploaded and indexed.
+          {message || 'Document successfully uploaded and indexed.'}
+        </div>
+      )}
+
+      {status === 'error' && message && (
+        <div className="mt-4 p-4 text-center text-sm font-mono text-[var(--color-brand-danger)] bg-[#241010] border border-[var(--color-brand-danger)] rounded">
+          {message}
         </div>
       )}
     </div>
